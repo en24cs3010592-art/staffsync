@@ -1,0 +1,14 @@
+import mongoose from 'mongoose';
+const {Schema,model}=mongoose;
+const opts={timestamps:true};
+const user=new Schema({name:{type:String,required:true,trim:true},email:{type:String,required:true,unique:true,lowercase:true,trim:true},password:{type:String,required:true,select:false},role:{type:String,enum:['employee','manager','hr'],default:'employee'},department:{type:String,default:'Engineering'},title:{type:String,default:'Team member'},phone:{type:String,default:''},address:{type:String,default:''},active:{type:Boolean,default:true}},opts);
+export const User=model('User',user);
+export const Employee=model('Employee',new Schema({user:{type:Schema.Types.ObjectId,ref:'User',unique:true},manager:{type:Schema.Types.ObjectId,ref:'User',default:null},performance:{type:Number,min:1,max:5,default:3},review:{type:String,default:''}},opts));
+export const Manager=model('Manager',new Schema({user:{type:Schema.Types.ObjectId,ref:'User',unique:true}},opts));
+const attendance=new Schema({user:{type:Schema.Types.ObjectId,ref:'User',required:true},date:{type:String,required:true},checkIn:Date,checkOut:Date},opts);attendance.index({user:1,date:1},{unique:true});
+export const Attendance=model('Attendance',attendance);
+const leave=new Schema({user:{type:Schema.Types.ObjectId,ref:'User',required:true},from:String,to:String,type:{type:String,enum:['Casual','Sick','Annual']},reason:String,status:{type:String,enum:['Pending','Approved','Rejected'],default:'Pending'},reviewer:{type:Schema.Types.ObjectId,ref:'User'}},opts);leave.index({user:1,createdAt:-1});
+export const Leave=model('Leave',leave);
+export const Announcement=model('Announcement',new Schema({title:String,body:String,author:{type:Schema.Types.ObjectId,ref:'User'}},opts));
+export const Training=model('Training',new Schema({title:String,description:String,date:String,owner:{type:Schema.Types.ObjectId,ref:'User'},attendees:[{type:Schema.Types.ObjectId,ref:'User'}]},opts));
+export const Notification=model('Notification',new Schema({user:{type:Schema.Types.ObjectId,ref:'User'},message:String,read:{type:Boolean,default:false}},opts));

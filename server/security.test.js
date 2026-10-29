@@ -1,0 +1,23 @@
+import {test,after} from 'node:test';
+import assert from 'node:assert/strict';
+import jwt from 'jsonwebtoken';
+import {app} from './app.js';
+import {User,Employee,Leave} from './models.js';
+process.env.JWT_SECRET='test-only-secret-with-more-than-32-characters';
+const ids={employee:'111111111111111111111111',manager:'222222222222222222222222',other:'333333333333333333333333'};
+const users=Object.fromEntries(Object.entries(ids).map(([role,id])=>[id,{id,_id:id,role:role==='other'?'employee':role,active:true}]));
+User.findById=async id=>users[id];
+Employee.find=async()=>[{user:ids.employee}];
+const server=app.listen(0);await new Promise(r=>server.once('listening',r));
+after(()=>server.close());
+const base=`http://127.0.0.1:${server.address().port}/api`;
+async function request(path,role,method='GET',body){return fetch(base+path,{method,headers:{'Content-Type':'application/json',...(role?{Authorization:'Bearer '+jwt.sign({id:ids[role]},process.env.JWT_SECRET)}:{})},...(body?{body:JSON.stringify(body)}:{})});}
+test('health works without auth',async()=>assert.equal((await request('/health')).status,200));
+test('protected API rejects missing token',async()=>assert.equal((await request('/people')).status,401));
+test('employee cannot list people',async()=>assert.equal((await request('/people','employee')).status,403));
+test('employee cannot publish announcements',async()=>assert.equal((await request('/announcements','employee','POST',{})).status,403));
+test('invalid leave dates are rejected before database writes',async()=>assert.equal((await request('/leaves','employee','POST',{from:'2026-02-30',to:'2026-03-02',type:'Sick',reason:'Test'})).status,400));
+test('employee cannot create privileged accounts',async()=>assert.equal((await request('/people','employee','POST',{role:'hr'})).status,403));
+test('manager cannot review another teams leave',async()=>{Leave.findById=async()=>({id:'444444444444444444444444',user:ids.other});assert.equal((await request('/leaves/444444444444444444444444','manager','PATCH',{status:'Approved'})).status,403);});
+test('manager cannot approve own leave',async()=>{Leave.findById=async()=>({id:'444444444444444444444444',user:ids.manager});assert.equal((await request('/leaves/444444444444444444444444','manager','PATCH',{status:'Approved'})).status,403);});
+test('disabled account cannot use existing token',async()=>{users[ids.employee].active=false;assert.equal((await request('/me','employee')).status,401);users[ids.employee].active=true;});
